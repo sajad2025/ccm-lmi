@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css'
 import * as math from 'mathjs';
 import axios from 'axios';
+import { Switch } from '@headlessui/react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 interface Signal {
   name: string;
   min: number;
   max: number;
+  ic: number;
 }
 
 interface MatrixElement {
@@ -64,6 +67,195 @@ interface SystemConfig {
   matrixQ: number[];
 }
 
+interface SimulationPoint {
+  t: number;
+  states: number[];
+  u: number;
+}
+
+interface SimulationData {
+  points: SimulationPoint[];
+  isRunning: boolean;
+}
+
+// Add PendulumAnimation component
+const PendulumAnimation: React.FC<{
+  simulationData: SimulationPoint[];
+  duration: number;
+  width: number;
+  height: number;
+}> = ({ simulationData, duration, width, height }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number>();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const startTimeRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
+
+  const getInterpolatedTheta = useCallback((time: number) => {
+    const normalizedTime = time % duration;
+    const dt = simulationData[1].t - simulationData[0].t;
+    const index = Math.floor(normalizedTime / dt);
+    const nextIndex = Math.min(index + 1, simulationData.length - 1);
+    
+    if (index >= simulationData.length - 1) return simulationData[simulationData.length - 1].states[0];
+    
+    const t0 = index * dt;
+    const t1 = nextIndex * dt;
+    const alpha = (normalizedTime - t0) / (t1 - t0);
+    
+    return simulationData[index].states[0] * (1 - alpha) + simulationData[nextIndex].states[0] * alpha;
+  }, [duration, simulationData]);
+
+  const animate = useCallback((timestamp: number) => {
+    if (!isPlaying) return;
+    
+    if (startTimeRef.current === 0) {
+      startTimeRef.current = timestamp;
+      lastTimeRef.current = timestamp;
+    }
+
+    const deltaTime = (timestamp - lastTimeRef.current) / 1000;
+    lastTimeRef.current = timestamp;
+    
+    setCurrentTime(prev => {
+      const newTime = prev + deltaTime;
+      if (newTime >= duration) {
+        setIsPlaying(false);
+        return duration;
+      }
+      return newTime;
+    });
+    
+    animationFrameRef.current = requestAnimationFrame(animate);
+  }, [isPlaying, duration]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      animationFrameRef.current = requestAnimationFrame(animate);
+    }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlaying, animate]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Set origin to center of canvas
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // Pendulum parameters
+    const length = Math.min(width, height) * 0.4;
+    const bobRadius = 10;
+
+    // Calculate pendulum end point
+    // theta=0 means pointing down, positive theta rotates counterclockwise
+    const theta = getInterpolatedTheta(currentTime);
+    const angle = Math.PI/2 + theta;  // Start from downward position (PI/2) and add theta
+    const endX = centerX + length * Math.cos(angle);
+    const endY = centerY + length * Math.sin(angle);
+
+    // Draw pivot point
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 5, 0, 2 * Math.PI);
+    ctx.fillStyle = '#333';
+    ctx.fill();
+
+    // Draw rod
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(endX, endY);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw bob
+    ctx.beginPath();
+    ctx.arc(endX, endY, bobRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = '#4a90e2';
+    ctx.fill();
+    ctx.strokeStyle = '#357abd';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+  }, [currentTime, width, height]);
+
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleReset = () => {
+    setCurrentTime(0);
+    startTimeRef.current = 0;
+    lastTimeRef.current = 0;
+    setIsPlaying(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        style={{ 
+          background: '#f8f9fa',
+          borderRadius: '8px',
+          border: '1px solid #eee'
+        }}
+      />
+      <div style={{ 
+        position: 'absolute',
+        bottom: '10px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        gap: '10px',
+        background: 'rgba(255, 255, 255, 0.8)',
+        padding: '4px 8px',
+        borderRadius: '4px'
+      }}>
+        <button
+          onClick={handlePlayPause}
+          style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            border: '1px solid #ddd',
+            background: '#fff',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          {isPlaying ? 'Pause' : 'Play'}
+        </button>
+        <button
+          onClick={handleReset}
+          style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            border: '1px solid #ddd',
+            background: '#fff',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const systemConfigs: Record<string, SystemConfig> = {
     'empty': {
@@ -71,7 +263,7 @@ function App() {
       n: 1,
       m: 1,
       states: [
-        { name: '', min: -0.1, max: 0.1 }
+        { name: '', min: -0.1, max: 0.1, ic: 0 }
       ],
       matrixA: [
         [{ expression: '0' }]
@@ -91,12 +283,12 @@ function App() {
       n: 2,
       m: 1,
       states: [
-        { name: 'theta', min: -0.5, max: 0.5 },
-        { name: 'omega', min: -0.5, max: 0.5 }
+        { name: 'theta', min: 2.9, max: 3.3, ic: 2.9 },
+        { name: 'omega', min: -0.5, max: 0.5, ic: 0 }
       ],
       matrixA: [
         [{ expression: 'omega' }],
-        [{ expression: '-sin(theta)-0.1*omega' }]
+        [{ expression: '-10*sin(theta)-0.1*omega' }]
       ],
       matrixB: [
         [{ expression: '0' }],
@@ -104,7 +296,7 @@ function App() {
       ],
       lmiParams: {
         lambda: 1,
-        alphaMin: 0.5,
+        alphaMin: 0.1,
         alphaMax: 5.0
       },
       matrixQ: [0, 0]
@@ -114,10 +306,10 @@ function App() {
       n: 4,
       m: 1,
       states: [
-        { name: 'theta', min: -0.75, max: 0.75 },
-        { name: 'eta', min: -0.5, max: 0.5 },
-        { name: 'p', min: -0.2, max: 0.2 },
-        { name: 'v', min: -1, max: 1 }
+        { name: 'theta', min: -0.75, max: 0.75, ic: 0.1 },
+        { name: 'eta', min: -0.5, max: 0.5, ic: 0 },
+        { name: 'p', min: -0.2, max: 0.2, ic: 0 },
+        { name: 'v', min: -1, max: 1, ic: 0 }
       ],
       matrixA: [
         [{ expression: 'eta*cos(theta)' }],
@@ -144,12 +336,20 @@ function App() {
     const config = systemConfigs[configKey];
     if (!config) return;
 
+    // Reset simulation data and plots
+    setSimulationData({
+      points: [],
+      isRunning: false
+    });
+    setSimulationError(null);
+    setSimulationMode('open-loop');
+
     // First update dimensions to match the config
     setSystemDimensions({ n: config.n, m: config.m });
     
     // Reset states array to match config
     const newStates = Array(config.n).fill(null).map((_, i) => 
-      i < config.states.length ? config.states[i] : { name: '', min: -0.1, max: 0.1 }
+      i < config.states.length ? config.states[i] : { name: '', min: -0.1, max: 0.1, ic: 0 }
     );
     setStates(newStates);
 
@@ -197,15 +397,15 @@ function App() {
   });
 
   const [states, setStates] = useState<Signal[]>(() => [
-    { name: 'theta', min: -0.75, max: 0.75 },
-    { name: 'eta', min: -0.5, max: 0.5 },
-    { name: 'p', min: -0.2, max: 0.2 },
-    { name: 'v', min: -1, max: 1 }
+    { name: 'theta', min: -0.75, max: 0.75, ic: 0 },
+    { name: 'eta', min: -0.5, max: 0.5, ic: 0 },
+    { name: 'p', min: -0.2, max: 0.2, ic: 0 },
+    { name: 'v', min: -1, max: 1, ic: 0 }
   ]);
 
   const [timeVector, setTimeVector] = useState({
     duration: 10,
-    sampleTime: 0.1
+    sampleTime: 0.05
   });
 
   const [matrixA, setMatrixA] = useState<MatrixElement[][]>(() => [
@@ -263,6 +463,15 @@ function App() {
     constraintsViolation: null
   });
 
+  const [simulationMode, setSimulationMode] = useState<'open-loop' | 'closed-loop'>('open-loop');
+
+  const [simulationData, setSimulationData] = useState<SimulationData>({
+    points: [],
+    isRunning: false
+  });
+
+  // Add this state for simulation errors
+  const [simulationError, setSimulationError] = useState<string | null>(null);
 
   const getDerivative = (expression: string, variable: string): string => {
     if (!expression || expression.trim() === '' || expression === '0') return '0';
@@ -318,7 +527,7 @@ function App() {
 
   // Load cart-pole system by default
   useEffect(() => {
-    loadSystemConfig('under-actuated-cartpole');
+    loadSystemConfig('fully-actuated-pendulum');
   }, []);
 
   const handleStateChange = (index: number, field: keyof Signal, value: string | number) => {
@@ -338,7 +547,7 @@ function App() {
       setStates(prevStates => {
         const validCount = getValidSignalCount(validValue);
         const newStates = Array(validCount).fill(null).map((_, i) => 
-          i < prevStates.length ? prevStates[i] : { name: '', min: 0, max: 1 }
+          i < prevStates.length ? prevStates[i] : { name: '', min: 0, max: 1, ic: 0 }
         );
         return newStates;
       });
@@ -521,8 +730,18 @@ function App() {
       // Get Jacobian at this point for matrix A
       const A = evaluateJacobianAtPoint(stateValues);
       
-      // Convert matrix B to numeric array
-      const B = matrixB.map(row => [Number(row[0].expression)]);
+      // Evaluate B matrix at the current state
+      const B = matrixB.map(row => {
+        try {
+          const result = math.evaluate(row[0].expression, stateValues);
+          return [Number(result)];  // Keep as column vector
+        } catch (error) {
+          console.error('Error evaluating B matrix element:', row[0].expression, error);
+          return [0];
+        }
+      });
+
+      console.log('LMI Analysis - Matrices:', { A, B });
 
       // Make API request to solve LMI
       const response = await axios.post('http://localhost:8000/solve-lmi', {
@@ -578,6 +797,212 @@ function App() {
     }
   };
 
+  const canEnableClosedLoop = () => {
+    return lmiAnalysis.feasible && lmiAnalysis.W && lmiAnalysis.W.length > 0;
+  };
+
+  const evaluateStateDerivative = (t: number, state: number[], expressions: MatrixElement[][], includeControl: boolean = false): number[] => {
+    const stateObj: Record<string, number> = {};
+    states.forEach((s, i) => {
+      const name = s.name || `x${i+1}`;
+      stateObj[name] = state[i];
+    });
+
+    // Calculate open-loop dynamics
+    const openLoopDynamics = expressions.map(row => {
+      try {
+        const result = math.evaluate(row[0].expression, stateObj);
+        return Number(result);
+      } catch (error) {
+        console.error('Error evaluating expression:', row[0].expression, error);
+        return 0;
+      }
+    });
+
+    // If in closed-loop mode, add Bu term
+    if (includeControl && simulationMode === 'closed-loop') {
+      const u = calculateControlInput(state);
+      // Evaluate B matrix with current state values
+      const B = matrixB.map(row => {
+        try {
+          const result = math.evaluate(row[0].expression, stateObj);
+          return Number(result);
+        } catch (error) {
+          console.error('Error evaluating B matrix element:', row[0].expression, error);
+          return 0;
+        }
+      });
+      const Bu = B.map(b => b * u);
+      return openLoopDynamics.map((f, i) => f + Bu[i]);
+    }
+
+    return openLoopDynamics;
+  };
+
+  const calculateControlInput = (state: number[]): number => {
+    if (!lmiAnalysis.W || !lmiAnalysis.rho) return 0;
+    
+    try {
+      // Create state object for evaluating expressions
+      const stateObj: Record<string, number> = {};
+      states.forEach((s, i) => {
+        const name = s.name || `x${i+1}`;
+        stateObj[name] = state[i];
+      });
+
+      // Evaluate B matrix at current state
+      const B = matrixB.map(row => {
+        try {
+          const result = math.evaluate(row[0].expression, stateObj);
+          return Number(result);
+        } catch (error) {
+          console.error('Error evaluating B matrix element:', row[0].expression, error);
+          return 0;
+        }
+      });
+
+      // Convert arrays to mathjs matrices for proper matrix operations
+      const B_matrix = math.matrix(B);  // n×1 matrix
+      
+      // Create error state vector relative to upward equilibrium [π, 0]
+      const error_state = [...state];
+      error_state[0] = state[0] - Math.PI;  // Compute error relative to θ = π
+      const error_state_matrix = math.matrix(error_state);  // n×1 matrix
+      
+      const W_matrix = math.matrix(lmiAnalysis.W);  // n×n matrix
+      
+      // Calculate W^(-1)
+      const W_inv = math.inv(W_matrix);
+      
+      // Calculate W^(-1) * error first (n×n * n×1 = n×1)
+      const W_inv_error = math.multiply(W_inv, error_state_matrix);
+      
+      // Calculate B^T * (W^(-1) * error) (1×n * n×1 = scalar)
+      const BT_W_inv_error = math.multiply(math.transpose(B_matrix), W_inv_error);
+      
+      // Calculate final control: u = -0.5 * rho * B^T * W^(-1) * error
+      const u = -0.5 * lmiAnalysis.rho * Number(BT_W_inv_error);
+      
+      console.log('Control calculation details:', {
+        state_vector: state,
+        error_state: error_state,
+        B_vector: B,
+        W_matrix: lmiAnalysis.W,
+        W_inverse: W_inv.valueOf(),
+        W_inv_error: W_inv_error.valueOf(),
+        BT_W_inv_error: BT_W_inv_error,
+        rho: lmiAnalysis.rho,
+        control_value: u
+      });
+      
+      return u;
+    } catch (error) {
+      console.error('Error calculating control input:', error);
+      return 0;
+    }
+  };
+
+  const rk4Step = (
+    t: number,
+    state: number[],
+    dt: number,
+    expressions: MatrixElement[][],
+    includeControl: boolean = false
+  ): number[] => {
+    const k1 = evaluateStateDerivative(t, state, expressions, includeControl);
+    
+    const k2State = state.map((x, i) => x + k1[i] * dt / 2);
+    const k2 = evaluateStateDerivative(t + dt/2, k2State, expressions, includeControl);
+    
+    const k3State = state.map((x, i) => x + k2[i] * dt / 2);
+    const k3 = evaluateStateDerivative(t + dt/2, k3State, expressions, includeControl);
+    
+    const k4State = state.map((x, i) => x + k3[i] * dt);
+    const k4 = evaluateStateDerivative(t + dt, k4State, expressions, includeControl);
+    
+    return state.map((x, i) => 
+      x + (dt / 6) * (k1[i] + 2*k2[i] + 2*k3[i] + k4[i])
+    );
+  };
+
+  const runSimulation = () => {
+    if (simulationData.isRunning) return;
+    
+    // Clear previous error
+    setSimulationError(null);
+    
+    // Validate time settings
+    if (timeVector.duration <= 0 || timeVector.sampleTime <= 0) {
+      setSimulationError("Duration and sample time must be positive numbers");
+      return;
+    }
+    
+    if (timeVector.sampleTime >= timeVector.duration) {
+      setSimulationError("Sample time must be smaller than duration");
+      return;
+    }
+
+    // Additional validation for closed-loop mode
+    if (simulationMode === 'closed-loop' && (!lmiAnalysis.W || !lmiAnalysis.rho)) {
+      setSimulationError("Cannot run closed-loop simulation without valid LMI solution");
+      return;
+    }
+    
+    setSimulationData(prev => ({ ...prev, isRunning: true }));
+    
+    try {
+      // Get initial conditions
+      const initialState = states.map(s => s.ic);
+      const dt = timeVector.sampleTime;
+      const duration = timeVector.duration;
+      const numSteps = Math.floor(duration / dt);
+      
+      // Initialize simulation data
+      let currentState = [...initialState];
+      const initialU = simulationMode === 'closed-loop' ? calculateControlInput(currentState) : 0;
+      const points: SimulationPoint[] = [{
+        t: 0,
+        states: [...currentState],
+        u: initialU
+      }];
+      
+      // Run simulation
+      for (let step = 1; step <= numSteps; step++) {
+        const t = step * dt;
+        currentState = rk4Step(t, currentState, dt, matrixA, simulationMode === 'closed-loop');
+        
+        // Check for NaN or Infinity
+        if (currentState.some(x => isNaN(x) || !isFinite(x))) {
+          throw new Error("Simulation produced invalid values. The system might be unstable.");
+        }
+        
+        // Calculate control input for this step
+        const u = simulationMode === 'closed-loop' ? calculateControlInput(currentState) : 0;
+        
+        points.push({
+          t,
+          states: [...currentState],
+          u
+        });
+      }
+      
+      setSimulationData({
+        points,
+        isRunning: false
+      });
+    } catch (error) {
+      setSimulationError(error instanceof Error ? error.message : "An error occurred during simulation");
+      setSimulationData(prev => ({ ...prev, isRunning: false, points: [] }));
+    }
+  };
+
+  const handleTimeVectorChange = (field: 'duration' | 'sampleTime', value: number) => {
+    setTimeVector(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
   return (
     <div className="app-container">
       <div className="controls-panel">
@@ -590,7 +1015,7 @@ function App() {
             <select 
               onChange={(e) => loadSystemConfig(e.target.value)}
               className="system-select"
-              defaultValue="under-actuated-cartpole"
+              defaultValue="fully-actuated-pendulum"
             >
               {Object.entries(systemConfigs).map(([key, config]) => (
                 <option key={key} value={key}>
@@ -610,9 +1035,9 @@ function App() {
               <input
                 type="number"
                 value={timeVector.duration}
-                onChange={(e) => setTimeVector({ ...timeVector, duration: parseFloat(e.target.value) })}
+                onChange={(e) => handleTimeVectorChange('duration', Math.max(0, parseFloat(e.target.value)))}
                 min="0"
-                step="0.1"
+                step="5"
                 className="time-input"
               />
             </div>
@@ -621,9 +1046,9 @@ function App() {
               <input
                 type="number"
                 value={timeVector.sampleTime}
-                onChange={(e) => setTimeVector({ ...timeVector, sampleTime: parseFloat(e.target.value) })}
-                min="0.001"
-                step="0.001"
+                onChange={(e) => handleTimeVectorChange('sampleTime', Math.max(0.01, parseFloat(e.target.value)))}
+                min="0.01"
+                step="0.05"
                 className="time-input"
               />
             </div>
@@ -665,6 +1090,7 @@ function App() {
               <span>Name</span>
               <span>Min</span>
               <span>Max</span>
+              <span>I.C.</span>
             </div>
             {states.slice(0, getValidSignalCount(systemDimensions.n)).map((state, index) => (
               <div key={`state-${index}`} className="state-row">
@@ -687,6 +1113,13 @@ function App() {
                   step="0.5"
                   value={state.max}
                   onChange={(e) => handleStateChange(index, 'max', parseFloat(e.target.value))}
+                  className="state-input"
+                />
+                <input
+                  type="number"
+                  step="0.1"
+                  value={state.ic}
+                  onChange={(e) => handleStateChange(index, 'ic', parseFloat(e.target.value))}
                   className="state-input"
                 />
               </div>
@@ -925,7 +1358,163 @@ function App() {
 
       <div className="simulation-panel">
         <h2>Simulation</h2>
-        {/* Simulation content will go here */}
+        <div className="control-section">
+          <div className="simulation-controls">
+            <div className="simulation-mode-selector">
+              <label className="mode-label">Mode:</label>
+              <div className="simulation-controls-row">
+                <div className="mode-switch-container">
+                  <span className={`mode-text ${simulationMode === 'open-loop' ? 'active' : ''}`}>
+                    Open-Loop
+                  </span>
+                  <Switch
+                    checked={simulationMode === 'closed-loop'}
+                    onChange={(checked: boolean) => setSimulationMode(checked ? 'closed-loop' : 'open-loop')}
+                    disabled={!canEnableClosedLoop()}
+                    className={`switch-base ${
+                      canEnableClosedLoop() ? 'switch-enabled' : 'switch-disabled'
+                    }`}
+                  >
+                    <span
+                      className={`switch-handle ${
+                        simulationMode === 'closed-loop' ? 'switch-handle-active' : ''
+                      }`}
+                    />
+                  </Switch>
+                  <span className={`mode-text ${simulationMode === 'closed-loop' ? 'active' : ''}`}>
+                    Closed-Loop
+                  </span>
+                </div>
+                <button
+                  onClick={runSimulation}
+                  disabled={simulationData.isRunning}
+                  className="simulate-button"
+                >
+                  {simulationData.isRunning ? 'Simulating...' : 'Run Simulation'}
+                </button>
+              </div>
+              {!canEnableClosedLoop() && (
+                <div className="mode-hint">
+                  Run CCM-LMI analysis first to enable closed-loop simulation
+                </div>
+              )}
+            </div>
+            
+            {simulationData.points.length > 0 && (
+              <div className="simulation-plot">
+                {/* Add Pendulum Animation for inverted pendulum system */}
+                {Object.entries(systemConfigs).find(([key, config]) => 
+                  key === 'fully-actuated-pendulum' && 
+                  config.states[0].name === states[0].name
+                ) && (
+                  <div style={{ 
+                    marginBottom: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
+                  }}>
+                    <h3 style={{ margin: '0 0 10px 0' }}>Pendulum Animation</h3>
+                    <PendulumAnimation
+                      simulationData={simulationData.points}
+                      duration={timeVector.duration}
+                      width={180}
+                      height={180}
+                    />
+                  </div>
+                )}
+
+                {/* States Plot */}
+                <LineChart
+                  width={600}
+                  height={200}
+                  data={simulationData.points}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="t" 
+                    ticks={Array.from(
+                      { length: Math.floor(timeVector.duration / 2) + 1 },
+                      (_, i) => i * 2
+                    )}
+                    tickCount={Math.floor(timeVector.duration / 2) + 1}
+                  />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend 
+                    layout="horizontal"
+                    align="right"
+                    verticalAlign="top"
+                    wrapperStyle={{
+                      paddingLeft: "10px",
+                      paddingTop: "10px",
+                      backgroundColor: "rgba(255, 255, 255, 0.8)",
+                      borderRadius: "4px"
+                    }}
+                  />
+                  {states.map((state, idx) => (
+                    <Line 
+                      key={`state-${idx}`}
+                      type="monotone" 
+                      dataKey={`states[${idx}]`}
+                      stroke={idx % 2 === 0 ? '#8884d8' : '#82ca9d'}
+                      name={state.name || `x${idx+1}`}
+                      dot={false} 
+                    />
+                  ))}
+                </LineChart>
+
+                {/* Control Input Plot */}
+                {simulationMode === 'closed-loop' && (
+                  <LineChart
+                    width={600}
+                    height={200}
+                    data={simulationData.points}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis 
+                      dataKey="t" 
+                      label={{ value: 'Time (s)', position: 'bottom' }}
+                      ticks={Array.from(
+                        { length: Math.floor(timeVector.duration / 2) + 1 },
+                        (_, i) => i * 2
+                      )}
+                      tickCount={Math.floor(timeVector.duration / 2) + 1}
+                    />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend 
+                      layout="horizontal"
+                      align="right"
+                      verticalAlign="top"
+                      wrapperStyle={{
+                        paddingLeft: "10px",
+                        paddingTop: "10px",
+                        backgroundColor: "rgba(255, 255, 255, 0.8)",
+                        borderRadius: "4px"
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="u"
+                      stroke="#ff7300"
+                      name="control input"
+                      dot={false}
+                    />
+                  </LineChart>
+                )}
+              </div>
+            )}
+
+            {/* Add this error message display in the simulation panel, after the simulation button */}
+            {simulationError && (
+              <div className="simulation-error">
+                {simulationError}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
