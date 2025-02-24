@@ -23,8 +23,9 @@ class LMIRequest(BaseModel):
     matrix_q: List[float]
     alpha_min: float
     alpha_max: float
-    lambda_val: float
     n: int
+    lambda_val: float
+    use_d_constraint: bool = False  # New parameter with default value False
 
 @app.post("/solve-lmi")
 async def solve_lmi_endpoint(request: LMIRequest):
@@ -43,7 +44,8 @@ async def solve_lmi_endpoint(request: LMIRequest):
             request.alpha_min,
             request.alpha_max,
             request.n,
-            request.lambda_val
+            request.lambda_val,
+            request.use_d_constraint
         )
         
         return result

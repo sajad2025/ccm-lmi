@@ -29,13 +29,18 @@ interface EigenvalueAnalysis {
 }
 
 interface LMIAnalysis {
-  minEigH: number;
-  maxEigH: number;
+  minEigH: number | null;
+  maxEigH: number | null;
+  minEigD: number | null;
+  maxEigD: number | null;
   feasible: boolean;
   W: number[][];
+  M: number[][];
   rho: number;
   minEigW: number;
   maxEigW: number;
+  minEigM: number;
+  maxEigM: number;
   solverInfo: {
     solverName: string;
     setupTime: number | null;
@@ -44,7 +49,8 @@ interface LMIAnalysis {
     optimalValue: number | null;
   };
   constraintsViolation: {
-    H_negative_definite: boolean;
+    H_negative_definite: boolean | null;
+    D_positive_semidefinite: boolean | null;
     W_positive_definite: boolean;
     W_lower_bound: boolean;
     W_upper_bound: boolean;
@@ -189,7 +195,7 @@ const PendulumAnimation: React.FC<{
     ctx.lineWidth = 2;
     ctx.stroke();
 
-  }, [currentTime, width, height]);
+  }, [currentTime, width, height, getInterpolatedTheta]);
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying);
@@ -251,6 +257,247 @@ const PendulumAnimation: React.FC<{
         >
           Reset
         </button>
+      </div>
+    </div>
+  );
+};
+
+// Add CartPoleAnimation component
+const CartPoleAnimation: React.FC<{
+  simulationData: SimulationPoint[];
+  duration: number;
+  width: number;
+  height: number;
+}> = ({ simulationData, duration, width, height }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number>();
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const startTimeRef = useRef<number>(0);
+  const lastTimeRef = useRef<number>(0);
+
+  // Reset animation when simulation data changes
+  useEffect(() => {
+    handleReset();
+  }, [simulationData]);
+
+  const getInterpolatedState = useCallback((time: number) => {
+    if (!simulationData || simulationData.length < 2) return simulationData[0]?.states || [];
+    
+    const normalizedTime = time % duration;
+    const dt = simulationData[1].t - simulationData[0].t;
+    const index = Math.floor(normalizedTime / dt);
+    const nextIndex = Math.min(index + 1, simulationData.length - 1);
+    
+    if (index >= simulationData.length - 1) return simulationData[simulationData.length - 1].states;
+    
+    const t0 = index * dt;
+    const t1 = nextIndex * dt;
+    const alpha = (normalizedTime - t0) / (t1 - t0);
+    
+    return simulationData[index].states.map((val, i) => 
+      val * (1 - alpha) + simulationData[nextIndex].states[i] * alpha
+    );
+  }, [duration, simulationData]);
+
+  const animate = useCallback((timestamp: number) => {
+    if (!isPlaying) return;
+    
+    if (startTimeRef.current === 0) {
+      startTimeRef.current = timestamp;
+      lastTimeRef.current = timestamp;
+    }
+
+    const deltaTime = (timestamp - lastTimeRef.current) / 1000;
+    lastTimeRef.current = timestamp;
+    
+    setCurrentTime(prev => {
+      const newTime = prev + deltaTime;
+      if (newTime >= duration) {
+        setIsPlaying(false);
+        return duration;
+      }
+      return newTime;
+    });
+    
+    animationFrameRef.current = requestAnimationFrame(animate);
+  }, [isPlaying, duration]);
+
+  useEffect(() => {
+    if (isPlaying) {
+      animationFrameRef.current = requestAnimationFrame(animate);
+    }
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlaying, animate]);
+
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Get current state
+    const state = getInterpolatedState(currentTime);
+    if (!state.length) return;  // Don't render if no state available
+
+    const theta = state[0];  // Angle from vertical (north)
+    const p = state[2];      // Cart position
+
+    // Cart parameters
+    const cartWidth = 40;
+    const cartHeight = 20;
+    const poleLength = Math.min(width, height) * 0.3;
+    const bobRadius = 6;
+
+    // Scale cart position to canvas
+    const scale = (width - cartWidth) / 2;  // Use half the canvas width as scale
+    const cartX = width/2 + p * scale;  // Center position + scaled displacement
+    const cartY = height * 0.7;  // Place cart at 70% of height
+
+    // Draw cart
+    ctx.fillStyle = '#666';
+    ctx.fillRect(cartX - cartWidth/2, cartY - cartHeight/2, cartWidth, cartHeight);
+
+    // Calculate pole end point
+    // theta=0 means pointing up, positive theta rotates clockwise
+    const poleX = cartX + poleLength * Math.sin(theta);
+    const poleY = cartY - poleLength * Math.cos(theta);
+
+    // Draw pole
+    ctx.beginPath();
+    ctx.moveTo(cartX, cartY);
+    ctx.lineTo(poleX, poleY);
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Draw bob at pole end
+    ctx.beginPath();
+    ctx.arc(poleX, poleY, bobRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = '#4a90e2';
+    ctx.fill();
+    ctx.strokeStyle = '#357abd';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Draw ground line
+    ctx.beginPath();
+    ctx.moveTo(0, cartY + cartHeight/2 + 1);
+    ctx.lineTo(width, cartY + cartHeight/2 + 1);
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+  }, [currentTime, width, height, getInterpolatedState]);
+
+  const handlePlayPause = () => {
+    if (!simulationData || simulationData.length < 2) return;
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleReset = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    setCurrentTime(0);
+    startTimeRef.current = 0;
+    lastTimeRef.current = 0;
+    setIsPlaying(false);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+      <canvas
+        ref={canvasRef}
+        width={width}
+        height={height}
+        style={{ 
+          background: '#f8f9fa',
+          borderRadius: '8px',
+          border: '1px solid #eee'
+        }}
+      />
+      <div style={{ 
+        position: 'absolute',
+        bottom: '10px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        gap: '10px',
+        background: 'rgba(255, 255, 255, 0.8)',
+        padding: '4px 8px',
+        borderRadius: '4px'
+      }}>
+        <button
+          onClick={handlePlayPause}
+          style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            border: '1px solid #ddd',
+            background: '#fff',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          {isPlaying ? 'Pause' : 'Play'}
+        </button>
+        <button
+          onClick={handleReset}
+          style={{
+            padding: '4px 8px',
+            borderRadius: '4px',
+            border: '1px solid #ddd',
+            background: '#fff',
+            cursor: 'pointer',
+            fontSize: '12px'
+          }}
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Add this component near the top of the file, after other component imports
+const MatrixDisplay: React.FC<{
+  matrix: number[][];
+  title?: string;
+}> = ({ matrix, title }) => {
+  if (!matrix || matrix.length === 0) return null;
+
+  return (
+    <div className="matrix-display">
+      {title && <div className="matrix-display-title">{title}</div>}
+      <div className="matrix-container">
+        <div>
+          {matrix.map((row, i) => (
+            <div key={i} className="matrix-row">
+              {row.map((element, j) => (
+                <div key={j} className="matrix-element">
+                  {element.toFixed(1)}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -343,6 +590,9 @@ function App() {
     });
     setSimulationError(null);
     setSimulationMode('open-loop');
+
+    // Set constraint type based on system
+    setUseDConstraint(false);  // Use H < 0 for all systems by default
 
     // First update dimensions to match the config
     setSystemDimensions({ n: config.n, m: config.m });
@@ -446,13 +696,18 @@ function App() {
   const [matrixQ, setMatrixQ] = useState<number[]>([1, 1, 15, 1]);  // Cart-pole Q matrix values
 
   const [lmiAnalysis, setLmiAnalysis] = useState<LMIAnalysis>({
-    minEigH: 0,
-    maxEigH: 0,
+    minEigH: null,
+    maxEigH: null,
+    minEigD: null,
+    maxEigD: null,
     feasible: false,
     W: Array(4).fill(0).map(() => Array(4).fill(0)),
+    M: Array(4).fill(0).map(() => Array(4).fill(0)),
     rho: 0,
     minEigW: 0,
     maxEigW: 0,
+    minEigM: 0,
+    maxEigM: 0,
     solverInfo: {
       solverName: '',
       setupTime: null,
@@ -472,6 +727,9 @@ function App() {
 
   // Add this state for simulation errors
   const [simulationError, setSimulationError] = useState<string | null>(null);
+
+  // Add this state variable near other state declarations
+  const [useDConstraint, setUseDConstraint] = useState(false);
 
   const getDerivative = (expression: string, variable: string): string => {
     if (!expression || expression.trim() === '' || expression === '0') return '0';
@@ -752,7 +1010,8 @@ function App() {
         alpha_min: lmiParams.alphaMin,
         alpha_max: lmiParams.alphaMax,
         lambda_val: lmiParams.lambda,
-        n: systemDimensions.n
+        n: systemDimensions.n,
+        use_d_constraint: useDConstraint
       });
 
       const result = response.data;
@@ -760,11 +1019,16 @@ function App() {
       setLmiAnalysis({
         minEigH: result.min_eig_h,
         maxEigH: result.max_eig_h,
+        minEigD: result.min_eig_d,
+        maxEigD: result.max_eig_d,
         feasible: result.feasible,
         W: result.W || Array(n).fill(0).map(() => Array(n).fill(0)),
+        M: result.M || Array(n).fill(0).map(() => Array(n).fill(0)),
         rho: result.rho,
         minEigW: result.min_eig_w,
         maxEigW: result.max_eig_w,
+        minEigM: result.min_eig_m,
+        maxEigM: result.max_eig_m,
         solverInfo: {
           solverName: result.solver_info.solver_name || '',
           setupTime: result.solver_info.setup_time || null,
@@ -778,13 +1042,18 @@ function App() {
     } catch (error) {
       console.error('Error in LMI analysis:', error);
       setLmiAnalysis({
-        minEigH: 0,
-        maxEigH: 0,
+        minEigH: null,
+        maxEigH: null,
+        minEigD: null,
+        maxEigD: null,
         feasible: false,
         W: Array(n).fill(0).map(() => Array(n).fill(0)),
+        M: Array(n).fill(0).map(() => Array(n).fill(0)),
         rho: 0,
         minEigW: 0,
         maxEigW: 0,
+        minEigM: 0,
+        maxEigM: 0,
         solverInfo: {
           solverName: '',
           setupTime: null,
@@ -864,11 +1133,23 @@ function App() {
       // Convert arrays to mathjs matrices for proper matrix operations
       const B_matrix = math.matrix(B);  // n×1 matrix
       
-      // Create error state vector relative to upward equilibrium [π, 0]
+      // Create error state vector based on the system type
       const error_state = [...state];
-      error_state[0] = state[0] - Math.PI;  // Compute error relative to θ = π
-      const error_state_matrix = math.matrix(error_state);  // n×1 matrix
+      const isCartPole = states.length === 4 && states[2]?.name === 'p';
       
+      if (isCartPole) {
+        // For cart-pole: error relative to [0,0,0,0]
+        error_state[0] = state[0] - 0;  // theta
+        error_state[1] = state[1] - 0;  // eta
+        error_state[2] = state[2] - 0;  // p
+        error_state[3] = state[3] - 0;  // v
+      } else {
+        // For inverted pendulum: error relative to [π,0]
+        error_state[0] = state[0] - Math.PI;  // theta
+        error_state[1] = state[1] - 0;        // omega
+      }
+      
+      const error_state_matrix = math.matrix(error_state);  // n×1 matrix
       const W_matrix = math.matrix(lmiAnalysis.W);  // n×n matrix
       
       // Calculate W^(-1)
@@ -877,11 +1158,9 @@ function App() {
       // Calculate W^(-1) * error first (n×n * n×1 = n×1)
       const W_inv_error = math.multiply(W_inv, error_state_matrix);
       
-      // Calculate B^T * (W^(-1) * error) (1×n * n×1 = scalar)
-      const BT_W_inv_error = math.multiply(math.transpose(B_matrix), W_inv_error);
-      
       // Calculate final control: u = -0.5 * rho * B^T * W^(-1) * error
-      const u = -0.5 * lmiAnalysis.rho * Number(BT_W_inv_error);
+      const B_transpose = math.transpose(B_matrix);
+      const u = -0.5 * lmiAnalysis.rho * math.multiply(B_transpose, W_inv_error);
       
       console.log('Control calculation details:', {
         state_vector: state,
@@ -889,13 +1168,12 @@ function App() {
         B_vector: B,
         W_matrix: lmiAnalysis.W,
         W_inverse: W_inv.valueOf(),
-        W_inv_error: W_inv_error.valueOf(),
-        BT_W_inv_error: BT_W_inv_error,
+        W_inv_error: W_inv_error,
         rho: lmiAnalysis.rho,
         control_value: u
       });
       
-      return u;
+      return Number(u);
     } catch (error) {
       console.error('Error calculating control input:', error);
       return 0;
@@ -1285,15 +1563,49 @@ function App() {
           <h3>CCM-LMI Optimization</h3>
           <div className="equation-block">
             <div>minimize ρ</div>
-            <div>subject to: H = A*W + W*transpose(A) - ρ*B*transpose(B) + 2λ*W ≺ 0</div>
+            <div>s.t. {useDConstraint ? (
+              <>
+                D = [-W*A<sup>T</sup> - A*W + ρBB<sup>T</sup>, W*L<sup>T</sup>; L*W, I] ≽ 0
+              </>
+            ) : (
+              <>H = A*W + W*A<sup>T</sup> - ρBB<sup>T</sup> + 2λW ≺ 0</>
+            )}</div>
             <div className="constraints">
               α<sub>min</sub>I ≼ W ≼ α<sub>max</sub>I, W = W<sup>T</sup> ≻ 0, ρ ≥ 0
             </div>
           </div>
+          <div className="settings-row">
+            <div className="parameter-group">
+              <label>Constraint Type:</label>
+              <div className="radio-group">
+                <label>
+                  <input
+                    type="radio"
+                    checked={!useDConstraint}
+                    onChange={() => setUseDConstraint(false)}
+                  />
+                  H ≺ 0
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    checked={useDConstraint}
+                    onChange={() => setUseDConstraint(true)}
+                  />
+                  D ≽ 0
+                </label>
+              </div>
+            </div>
+          </div>
           <div className="analysis-results">
             <div className="result-row">
-              <span>H Eigenvalue Range:</span>
-              <span>[{lmiAnalysis.minEigH.toFixed(4)}, {lmiAnalysis.maxEigH.toFixed(4)}]</span>
+              <span>{useDConstraint ? 'D Eigenvalue Range:' : 'H Eigenvalue Range:'}</span>
+              <span>
+                {useDConstraint 
+                  ? `[${lmiAnalysis.minEigD?.toFixed(4) || 'N/A'}, ${lmiAnalysis.maxEigD?.toFixed(4) || 'N/A'}]`
+                  : `[${lmiAnalysis.minEigH?.toFixed(4) || 'N/A'}, ${lmiAnalysis.maxEigH?.toFixed(4) || 'N/A'}]`
+                }
+              </span>
             </div>
             <div className="result-row">
               <span>W Eigenvalue Range:</span>
@@ -1303,52 +1615,58 @@ function App() {
               <span>ρ:</span>
               <span>{lmiAnalysis.rho.toFixed(4)}</span>
             </div>
-            <div className="result-row">
-              <span>LMI Feasible:</span>
-              <span>{lmiAnalysis.feasible ? "Yes" : "No"}</span>
-            </div>
-            <div className="result-row">
-              <span>Solver Status:</span>
-              <span>{lmiAnalysis.solverInfo.status}</span>
-            </div>
-            <div className="result-row">
-              <span>Solver:</span>
-              <span>{lmiAnalysis.solverInfo.solverName}</span>
-            </div>
-            <div className="result-row">
-              <span>Solve Time:</span>
-              <span>{lmiAnalysis.solverInfo.solveTime?.toFixed(3) || 'N/A'} s</span>
-            </div>
-            <div className="result-row">
-              <span>Decision Variables:</span>
-              <span>{Math.floor(systemDimensions.n * (systemDimensions.n + 1) / 2) + 1}</span>
-            </div>
-            <div className="result-row">
-              <span>Grid Points:</span>
-              <span>{eigenAnalysis.gridPoints}</span>
-            </div>
             {lmiAnalysis.constraintsViolation && (
               <div className="constraints-violation">
                 <h4>Constraints Check:</h4>
-                <div className={`violation-row ${lmiAnalysis.constraintsViolation.H_negative_definite ? 'satisfied' : 'violated'}`}>
-                  <span>H ≺ 0:</span>
-                  <span>{lmiAnalysis.constraintsViolation.H_negative_definite ? '✓' : '✗'}</span>
+                <div className="constraints-grid">
+                  <div className="constraints-column">
+                    <div className={`violation-row ${lmiAnalysis.constraintsViolation.W_positive_definite ? 'satisfied' : 'violated'}`}>
+                      <span>W ≻ 0:</span>
+                      <span>{lmiAnalysis.constraintsViolation.W_positive_definite ? '✓' : '✗'}</span>
+                    </div>
+                    <div className={`violation-row ${lmiAnalysis.constraintsViolation.W_lower_bound ? 'satisfied' : 'violated'}`}>
+                      <span>W ≽ α<sub>min</sub>I:</span>
+                      <span>{lmiAnalysis.constraintsViolation.W_lower_bound ? '✓' : '✗'}</span>
+                    </div>
+                    <div className={`violation-row ${lmiAnalysis.constraintsViolation.W_upper_bound ? 'satisfied' : 'violated'}`}>
+                      <span>W ≼ α<sub>max</sub>I:</span>
+                      <span>{lmiAnalysis.constraintsViolation.W_upper_bound ? '✓' : '✗'}</span>
+                    </div>
+                  </div>
+                  <div className="constraints-column">
+                    {useDConstraint ? (
+                      <div className={`violation-row ${lmiAnalysis.constraintsViolation.D_positive_semidefinite ? 'satisfied' : 'violated'}`}>
+                        <span>D ≽ 0:</span>
+                        <span>{lmiAnalysis.constraintsViolation.D_positive_semidefinite ? '✓' : '✗'}</span>
+                      </div>
+                    ) : (
+                      <div className={`violation-row ${lmiAnalysis.constraintsViolation.H_negative_definite ? 'satisfied' : 'violated'}`}>
+                        <span>H ≺ 0:</span>
+                        <span>{lmiAnalysis.constraintsViolation.H_negative_definite ? '✓' : '✗'}</span>
+                      </div>
+                    )}
+                    <div className={`violation-row ${lmiAnalysis.constraintsViolation.rho_positive ? 'satisfied' : 'violated'}`}>
+                      <span>ρ ≥ 0:</span>
+                      <span>{lmiAnalysis.constraintsViolation.rho_positive ? '✓' : '✗'}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className={`violation-row ${lmiAnalysis.constraintsViolation.W_positive_definite ? 'satisfied' : 'violated'}`}>
-                  <span>W ≻ 0:</span>
-                  <span>{lmiAnalysis.constraintsViolation.W_positive_definite ? '✓' : '✗'}</span>
-                </div>
-                <div className={`violation-row ${lmiAnalysis.constraintsViolation.W_lower_bound ? 'satisfied' : 'violated'}`}>
-                  <span>W ≽ α<sub>min</sub>I:</span>
-                  <span>{lmiAnalysis.constraintsViolation.W_lower_bound ? '✓' : '✗'}</span>
-                </div>
-                <div className={`violation-row ${lmiAnalysis.constraintsViolation.W_upper_bound ? 'satisfied' : 'violated'}`}>
-                  <span>W ≼ α<sub>max</sub>I:</span>
-                  <span>{lmiAnalysis.constraintsViolation.W_upper_bound ? '✓' : '✗'}</span>
-                </div>
-                <div className={`violation-row ${lmiAnalysis.constraintsViolation.rho_positive ? 'satisfied' : 'violated'}`}>
-                  <span>ρ ≥ 0:</span>
-                  <span>{lmiAnalysis.constraintsViolation.rho_positive ? '✓' : '✗'}</span>
+              </div>
+            )}
+            {lmiAnalysis.feasible && (
+              <div style={{ marginTop: '16px' }}>
+                <h4 style={{ marginBottom: '8px' }}>Riemannian Metric M = W⁻¹:</h4>
+                <MatrixDisplay matrix={lmiAnalysis.M} />
+                <div style={{ marginTop: '16px', fontSize: '14px', color: '#666' }}>
+                  <h4 style={{ marginBottom: '8px' }}>Solver Information:</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div>Solver: {lmiAnalysis.solverInfo.solverName}</div>
+                    <div>Status: {lmiAnalysis.solverInfo.status}</div>
+                    <div>Setup Time: {lmiAnalysis.solverInfo.setupTime?.toFixed(3) || 'N/A'} s</div>
+                    <div>Solve Time: {lmiAnalysis.solverInfo.solveTime?.toFixed(3) || 'N/A'} s</div>
+                    <div>Optimal Value: {lmiAnalysis.solverInfo.optimalValue?.toFixed(6) || 'N/A'}</div>
+                    <div>Grid Points: {eigenAnalysis.gridPoints}</div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1398,12 +1716,38 @@ function App() {
                   Run CCM-LMI analysis first to enable closed-loop simulation
                 </div>
               )}
+              {simulationMode === 'closed-loop' && (
+                <div className="equation-block" style={{ marginTop: '16px', fontSize: '0.9em' }}>
+                  {states.length === 4 && states[2]?.name === 'p' ? (
+                    // Cart-pole system
+                    <div>u = -0.5ρ · B<sup>T</sup>W<sup>-1</sup>(x - [0;0;0;0])</div>
+                  ) : (
+                    // Inverted pendulum
+                    <div>u = -0.5ρ · B<sup>T</sup>W<sup>-1</sup>(x - [π;0])</div>
+                  )}
+                </div>
+              )}
             </div>
             
             {simulationData.points.length > 0 && (
               <div className="simulation-plot">
-                {/* Add Pendulum Animation for inverted pendulum system */}
-                {Object.entries(systemConfigs).find(([key, config]) => 
+                {/* Add appropriate animation based on system type */}
+                {states.length === 4 && states[2]?.name === 'p' ? (
+                  <div style={{ 
+                    marginBottom: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
+                  }}>
+                    <h3 style={{ margin: '0 0 10px 0' }}>Cart-Pole Animation</h3>
+                    <CartPoleAnimation
+                      simulationData={simulationData.points}
+                      duration={timeVector.duration}
+                      width={450}
+                      height={200}
+                    />
+                  </div>
+                ) : Object.entries(systemConfigs).find(([key, config]) => 
                   key === 'fully-actuated-pendulum' && 
                   config.states[0].name === states[0].name
                 ) && (
@@ -1457,7 +1801,7 @@ function App() {
                       key={`state-${idx}`}
                       type="monotone" 
                       dataKey={`states[${idx}]`}
-                      stroke={idx % 2 === 0 ? '#8884d8' : '#82ca9d'}
+                      stroke={['#8884d8', '#82ca9d', '#ffc658', '#ff7300'][idx]}
                       name={state.name || `x${idx+1}`}
                       dot={false} 
                     />
