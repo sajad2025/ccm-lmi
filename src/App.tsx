@@ -572,10 +572,10 @@ function App() {
       ],
       lmiParams: {
         lambda: 0.1,
-        alphaMin: 0.1,
+        alphaMin: 0.005,
         alphaMax: 5.0
       },
-      matrixQ: [1, 1, 15, 1]
+      matrixQ: [1, 1, 10, 1]
     }
   };
 
@@ -592,7 +592,7 @@ function App() {
     setSimulationMode('open-loop');
 
     // Set constraint type based on system
-    setUseDConstraint(false);  // Use H < 0 for all systems by default
+    setUseDConstraint(configKey === 'under-actuated-cartpole');  // Use D >= 0 for cart-pole system
 
     // First update dimensions to match the config
     setSystemDimensions({ n: config.n, m: config.m });
@@ -689,11 +689,11 @@ function App() {
 
   const [lmiParams, setLmiParams] = useState({
     lambda: 0.1,
-    alphaMin: 0.1,
+    alphaMin: 0.005,
     alphaMax: 5.0
   });
 
-  const [matrixQ, setMatrixQ] = useState<number[]>([1, 1, 15, 1]);  // Cart-pole Q matrix values
+  const [matrixQ, setMatrixQ] = useState<number[]>([1, 1, 10, 1]);  // Cart-pole Q matrix values
 
   const [lmiAnalysis, setLmiAnalysis] = useState<LMIAnalysis>({
     minEigH: null,

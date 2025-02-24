@@ -111,8 +111,16 @@ def solve_lmi(
         print("\nSetting up optimization problem")
         prob = cp.Problem(cp.Minimize(rho), constraints)
         
-        # Try MOSEK first
-        if cp.MOSEK in cp.installed_solvers():
+        # Try CLARABEL first, then MOSEK, then fall back to SCS
+        if cp.CLARABEL in cp.installed_solvers():
+            solver = cp.CLARABEL
+            solver_opts = {
+                'verbose': True,
+                'tol_gap_abs': 1e-8,
+                'tol_gap_rel': 1e-8
+            }
+            print("\nUsing CLARABEL solver")
+        elif cp.MOSEK in cp.installed_solvers():
             solver = cp.MOSEK
             solver_opts = {
                 'verbose': True,
