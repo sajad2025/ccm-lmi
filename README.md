@@ -2,7 +2,7 @@
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/sajad2025/ccm-lmi/blob/main/LICENSE)
 
-A web application for analyzing and designing nonlinear control systems using Control Contraction Metrics (CCM) and Linear Matrix Inequalities (LMI). View the repository at [github.com/sajad2025/ccm-lmi](https://github.com/sajad2025/ccm-lmi).
+A web application for analyzing and designing nonlinear control systems using Control Contraction Metrics (CCM) and Linear Matrix Inequalities (LMI). 
 
 ## Background
 
@@ -37,22 +37,44 @@ This tool implements the CCM-LMI optimization framework described in the followi
    cd ccm-lmi
    ```
 
-2. Install dependencies:
+2. Install frontend dependencies:
    ```bash
    npm install
+   ```
+
+3. Set up the backend:
+   ```bash
    cd backend
+   python -m venv venv
+   source venv/bin/activate  # On Windows use: venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
-3. Start the backend server:
+4. Start the backend server:
    ```bash
-   python app.py
+   # Make sure you're in the backend directory
+   cd backend
+   # Make sure the virtual environment is activated
+   source venv/bin/activate  # On Windows use: venv\Scripts\activate
+   # Start the server
+   uvicorn main:app --reload
+   ```
+   The backend server should start and listen on http://localhost:8000
+
+   If you get an "Address already in use" error:
+   ```bash
+   # Kill any existing uvicorn processes
+   pkill -f uvicorn
+   # Then try starting the server again
+   uvicorn main:app --reload
    ```
 
-4. Start the frontend development server:
+5. Start the frontend development server (in a new terminal):
    ```bash
+   cd ..  # Go back to the root directory if you're in backend/
    npm run dev
    ```
+   The frontend should be available at http://localhost:5173
 
 ## Usage
 
@@ -72,3 +94,22 @@ Sajad Salmanipour ([@sajad2025](https://github.com/sajad2025))
 ## License
 
 [MIT License](https://github.com/sajad2025/ccm-lmi/blob/main/LICENSE) © 2025 Sajad Salmanipour
+
+## Troubleshooting
+
+### Backend Server Issues
+
+1. **"Address already in use" error**
+   - This means there's already a process running on port 8000
+   - Use `pkill -f uvicorn` to kill existing uvicorn processes
+   - Try starting the server again
+
+2. **"Could not import module 'main'" error**
+   - Make sure you're in the `backend` directory when starting the server
+   - Verify that `main.py` exists in the backend directory
+   - Ensure all dependencies are installed in your virtual environment
+
+3. **Other Issues**
+   - Make sure your virtual environment is activated
+   - Check that all dependencies are installed correctly
+   - Verify you're using the correct Python version (3.8+)
