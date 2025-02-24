@@ -1,6 +1,8 @@
 # CCM-LMI: Control Contraction Metrics Linear Matrix Inequalities
 
-A web application for analyzing and designing nonlinear control systems using Control Contraction Metrics (CCM) and Linear Matrix Inequalities (LMI).
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/sajad2025/ccm-lmi/blob/main/LICENSE)
+
+A web application for analyzing and designing nonlinear control systems using Control Contraction Metrics (CCM) and Linear Matrix Inequalities (LMI). View the repository at [github.com/sajad2025/ccm-lmi](https://github.com/sajad2025/ccm-lmi).
 
 ## Background
 
@@ -29,17 +31,24 @@ This tool implements the CCM-LMI optimization framework described in the followi
 
 ## Getting Started
 
-1. Clone the repository
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/sajad2025/ccm-lmi.git
+   cd ccm-lmi
+   ```
+
 2. Install dependencies:
    ```bash
    npm install
    cd backend
    pip install -r requirements.txt
    ```
+
 3. Start the backend server:
    ```bash
    python app.py
    ```
+
 4. Start the frontend development server:
    ```bash
    npm run dev
@@ -52,6 +61,14 @@ This tool implements the CCM-LMI optimization framework described in the followi
 3. Run the CCM-LMI optimization
 4. View results and analyze system properties
 
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Author
+
+Sajad Salmanipour ([@sajad2025](https://github.com/sajad2025))
+
 ## License
 
-MIT License
+[MIT License](https://github.com/sajad2025/ccm-lmi/blob/main/LICENSE) © 2025 Sajad Salmanipour
