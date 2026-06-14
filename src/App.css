@@ -1,3 +1,9 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 #root {
   width: 100%;
   height: 100vh;
@@ -124,7 +130,7 @@ h2 {
 
 .state-header {
   display: grid;
-  grid-template-columns: 160px 60px 60px 60px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
   font-weight: 500;
   color: #666;
@@ -133,13 +139,14 @@ h2 {
 
 .state-row {
   display: grid;
-  grid-template-columns: 160px 60px 60px 60px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
   align-items: center;
 }
 
 .state-input {
   width: 100%;
+  min-width: 0;
   padding: 6px;
   border: 1px solid #ddd;
   border-radius: 4px;
@@ -153,8 +160,9 @@ h2 {
 
 .time-vector-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 8px 16px;
   width: 100%;
 }
 
@@ -208,8 +216,9 @@ input:focus {
 
 .dimensions-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 8px 16px;
   width: 100%;
 }
 
@@ -290,9 +299,10 @@ input:focus {
   border-radius: 4px;
   background-color: #f8f9fa;
   font-family: monospace;
-  font-size: 14px;
+  font-size: 13px;
   color: #666;
-  width: 180px;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 32px;
   height: auto;
   white-space: pre-wrap;
@@ -316,10 +326,6 @@ input:focus {
   background-color: #f0f0f0;
 }
 
-/* Ensure the container can scroll horizontally if needed */
-.control-section > .matrix-grid {
-  min-width: fit-content;
-}
 
 .grid-controls {
   display: flex;
@@ -503,6 +509,7 @@ input:focus {
   padding: 12px;
   border-radius: 6px;
   border: 1px solid #eee;
+  overflow-wrap: anywhere;
 }
 
 .equation-block > div:first-child {
@@ -924,17 +931,5 @@ canvas {
     max-width: none;
     max-height: none;
     margin: 8px;
-  }
-
-  /* The states table uses the available width instead of fixed columns. */
-  .state-header,
-  .state-row {
-    grid-template-columns: minmax(64px, 1.6fr) 1fr 1fr 1fr;
-  }
-
-  .state-input,
-  .parameter-input,
-  .q-input {
-    min-width: 0;
   }
 }
