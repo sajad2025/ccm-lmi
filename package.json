@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "validate:solver": "node --experimental-strip-types validation/validateSolver.ts"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.0",

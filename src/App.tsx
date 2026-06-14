@@ -605,10 +605,10 @@ function App() {
     setStates(newStates);
 
     // Reset matrices to match config dimensions
-    const newMatrixA = Array(config.n).fill(null).map((_) => 
+    const newMatrixA = Array(config.n).fill(null).map(() =>
       Array(1).fill(null).map(() => ({ expression: '0' }))
     );
-    const newMatrixB = Array(config.n).fill(null).map((_) => 
+    const newMatrixB = Array(config.n).fill(null).map(() =>
       Array(config.m).fill(null).map(() => ({ expression: '0' }))
     );
 
@@ -785,11 +785,14 @@ function App() {
 
   useEffect(() => {
     calculateJacobian(matrixA, states.map(s => s.name));
+    // calculateJacobian is a render-local closure; its real inputs are listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matrixA, states, systemDimensions.n]);
 
-  // Load cart-pole system by default
+  // Load the default system once on mount.
   useEffect(() => {
     loadSystemConfig('fully-actuated-pendulum');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleStateChange = (index: number, field: keyof Signal, value: string | number) => {
@@ -862,7 +865,7 @@ function App() {
             const result = math.evaluate(derivative, stateValues);
             jacobianArray[i][j] = Number(result);
           }
-        } catch (error) {
+        } catch {
           console.error('Error evaluating derivative:', derivative, 'at point:', stateValues);
           jacobianArray[i][j] = 0;
         }
@@ -913,17 +916,18 @@ function App() {
             console.log('Raw eigenvalues:', result);
             
             if (result && Array.isArray(result.values)) {
-              result.values.forEach((value: any) => {
+              result.values.forEach((value: unknown) => {
                 try {
                   // Try to get real and imaginary parts
                   let re = 0, im = 0;
-                  
+
                   if (typeof value === 'number') {
                     re = value;
                     im = 0;
                   } else if (math.typeOf(value) === 'Complex') {
-                    re = Number(value.re || 0);
-                    im = Number(value.im || 0);
+                    const cplx = value as { re?: number; im?: number };
+                    re = Number(cplx.re || 0);
+                    im = Number(cplx.im || 0);
                   } else {
                     console.warn('Unknown eigenvalue type:', value);
                     return;
