@@ -2,7 +2,11 @@
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/sajad2025/ccm-lmi/blob/main/LICENSE)
 
-A web application for analyzing and designing nonlinear control systems using Control Contraction Metrics (CCM) and Linear Matrix Inequalities (LMI). 
+A web application for analyzing and designing nonlinear control systems using
+Control Contraction Metrics (CCM) and Linear Matrix Inequalities (LMI).
+
+**Runs entirely in your browser — no backend, no server, no install.** It can be
+added to a phone home screen as an installable, offline-capable app (PWA).
 
 ## Background
 
@@ -29,59 +33,75 @@ This tool implements the CCM-LMI optimization framework described in the followi
 - Automatic computation of Jacobian matrices
 - Constraint verification and feasibility analysis
 
+## How it works (architecture)
+
+Everything runs client-side — there is no network call at all:
+
+- **Symbolic Jacobian, eigenvalue grid analysis, RK4 simulation, animations and
+  plots** are computed in JavaScript with [`mathjs`](https://mathjs.org/) and
+  React.
+- **The CCM-LMI semidefinite program** is solved by a small pure-TypeScript
+  interior-point solver in [`src/solver/sdpSolver.ts`](src/solver/sdpSolver.ts):
+  it bisects on the objective ρ and, at each ρ, solves a max-margin LMI
+  feasibility problem with a log-det-barrier / Newton method (the matrix blocks
+  are tiny — W is n×n with n ≤ 4, the D-block ≤ 8×8 — so dense linear algebra is
+  instant). [`src/solver/localSolver.ts`](src/solver/localSolver.ts) adapts it to
+  the app.
+
+This replaces the former Python/FastAPI + [CVXPY](https://www.cvxpy.org/)/[Clarabel](https://clarabel.org/)
+backend. (The browser route through that stack via WebAssembly was ruled out:
+Clarabel's semidefinite cone needs BLAS/LAPACK, which do not compile to
+`wasm32`, so cvxpy-in-Pyodide crashes on the SDP.) The pure-JS solver was
+validated against the original cvxpy/Clarabel results across a 45-case sweep
+(pendulum, cart-pole, and randomized n=1–4 systems, both the H and D
+constraints) — feasibility verdicts match exactly and ρ agrees to a relative
+error below 3×10⁻⁴.
+
+Because the solver is plain JavaScript, the whole app is a static bundle with no
+download beyond the page itself, and it works fully offline.
+
 ## Getting Started
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/sajad2025/ccm-lmi.git
-   cd ccm-lmi
-   ```
+Requires Node.js 18+.
 
-2. Install frontend dependencies:
-   ```bash
-   npm install
-   ```
+```bash
+git clone https://github.com/sajad2025/ccm-lmi.git
+cd ccm-lmi
+npm install
+npm run dev
+```
 
-3. Set up the backend:
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+The app is available at http://localhost:5173/ccm-lmi/ (the `/ccm-lmi/` path
+matches the GitHub Pages `base`).
 
-4. Start the backend server:
-   ```bash
-   # Make sure you're in the backend directory
-   cd backend
-   # Make sure the virtual environment is activated
-   source venv/bin/activate  # On Windows use: venv\Scripts\activate
-   # Start the server
-   uvicorn main:app --reload
-   ```
-   The backend server should start and listen on http://localhost:8000
+To produce an optimized static build:
 
-   If you get an "Address already in use" error:
-   ```bash
-   # Kill any existing uvicorn processes
-   pkill -f uvicorn
-   # Then try starting the server again
-   uvicorn main:app --reload
-   ```
-
-5. Start the frontend development server (in a new terminal):
-   ```bash
-   cd ..  # Go back to the root directory if you're in backend/
-   npm run dev
-   ```
-   The frontend should be available at http://localhost:5173
+```bash
+npm run build      # outputs to dist/
+npm run preview    # serve the production build locally
+```
 
 ## Usage
 
 1. Select a predefined system or define your own
 2. Configure system parameters and analysis settings
-3. Run the CCM-LMI optimization
-4. View results and analyze system properties
+3. Click **Analyze** to run the CCM-LMI optimization (solved locally, instantly)
+4. Run the open- or closed-loop simulation and view the results
+
+## Deployment
+
+The app is a static site and ships as a Progressive Web App (PWA), so it can be
+hosted anywhere static files are served and installed to a phone home screen.
+
+This repo includes a GitHub Actions workflow
+([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)) that builds and
+deploys to **GitHub Pages** on every push to `main`. To enable it, set
+*Settings → Pages → Build and deployment → Source* to **GitHub Actions**. The
+site is then served at `https://<user>.github.io/ccm-lmi/` (the `base` path is
+configured in [`vite.config.ts`](vite.config.ts)).
+
+On a phone, open the deployed URL and choose **Add to Home Screen** to install it
+as an offline app.
 
 ## Contributing
 
@@ -94,22 +114,3 @@ Sajad Salmanipour ([@sajad2025](https://github.com/sajad2025))
 ## License
 
 [MIT License](https://github.com/sajad2025/ccm-lmi/blob/main/LICENSE) © 2025 Sajad Salmanipour
-
-## Troubleshooting
-
-### Backend Server Issues
-
-1. **"Address already in use" error**
-   - This means there's already a process running on port 8000
-   - Use `pkill -f uvicorn` to kill existing uvicorn processes
-   - Try starting the server again
-
-2. **"Could not import module 'main'" error**
-   - Make sure you're in the `backend` directory when starting the server
-   - Verify that `main.py` exists in the backend directory
-   - Ensure all dependencies are installed in your virtual environment
-
-3. **Other Issues**
-   - Make sure your virtual environment is activated
-   - Check that all dependencies are installed correctly
-   - Verify you're using the correct Python version (3.8+)

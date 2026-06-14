@@ -352,6 +352,21 @@ input:focus {
   background-color: #357abd;
 }
 
+.analyze-button:disabled {
+  background-color: #9bbfe6;
+  cursor: progress;
+}
+
+.solver-status {
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #357abd;
+  background-color: #eef4fc;
+  border: 1px solid #cfe0f7;
+  border-radius: 4px;
+}
+
 .analysis-results {
   background-color: white;
   padding: 12px;

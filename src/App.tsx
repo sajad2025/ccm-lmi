@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css'
 import * as math from 'mathjs';
-import axios from 'axios';
+import * as localSolver from './solver/localSolver';
+import type { CCMResult } from './solver/sdpSolver';
 import { Switch } from '@headlessui/react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
@@ -92,7 +93,7 @@ const PendulumAnimation: React.FC<{
   height: number;
 }> = ({ simulationData, duration, width, height }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const startTimeRef = useRef<number>(0);
@@ -270,7 +271,7 @@ const CartPoleAnimation: React.FC<{
   height: number;
 }> = ({ simulationData, duration, width, height }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const startTimeRef = useRef<number>(0);
@@ -731,6 +732,9 @@ function App() {
   // Add this state variable near other state declarations
   const [useDConstraint, setUseDConstraint] = useState(false);
 
+  // Status shown while the in-browser solver (Pyodide) boots / solves.
+  const [solverStatus, setSolverStatus] = useState<string | null>(null);
+
   const getDerivative = (expression: string, variable: string): string => {
     if (!expression || expression.trim() === '' || expression === '0') return '0';
     if (!variable || variable.trim() === '') return '0';
@@ -1001,8 +1005,10 @@ function App() {
 
       console.log('LMI Analysis - Matrices:', { A, B });
 
-      // Make API request to solve LMI
-      const response = await axios.post('http://localhost:8000/solve-lmi', {
+      // Solve the LMI locally (pure-JS interior-point solver — no backend).
+      setSolverStatus('Solving…');
+
+      const result: CCMResult = await localSolver.solveLMI({
         state_values: stateValues,
         matrix_a: A,
         matrix_b: B,
@@ -1014,8 +1020,8 @@ function App() {
         use_d_constraint: useDConstraint
       });
 
-      const result = response.data;
-      
+      setSolverStatus(null);
+
       setLmiAnalysis({
         minEigH: result.min_eig_h,
         maxEigH: result.max_eig_h,
@@ -1041,6 +1047,7 @@ function App() {
 
     } catch (error) {
       console.error('Error in LMI analysis:', error);
+      setSolverStatus(null);
       setLmiAnalysis({
         minEigH: null,
         maxEigH: null,
@@ -1070,7 +1077,7 @@ function App() {
     return lmiAnalysis.feasible && lmiAnalysis.W && lmiAnalysis.W.length > 0;
   };
 
-  const evaluateStateDerivative = (t: number, state: number[], expressions: MatrixElement[][], includeControl: boolean = false): number[] => {
+  const evaluateStateDerivative = (_t: number, state: number[], expressions: MatrixElement[][], includeControl: boolean = false): number[] => {
     const stateObj: Record<string, number> = {};
     states.forEach((s, i) => {
       const name = s.name || `x${i+1}`;
@@ -1159,8 +1166,10 @@ function App() {
       const W_inv_error = math.multiply(W_inv, error_state_matrix);
       
       // Calculate final control: u = -0.5 * rho * B^T * W^(-1) * error
+      // B_transpose · W_inv_error is a scalar (dot product); coerce to number.
       const B_transpose = math.transpose(B_matrix);
-      const u = -0.5 * lmiAnalysis.rho * math.multiply(B_transpose, W_inv_error);
+      const Bt_Winv_error = Number(math.multiply(B_transpose, W_inv_error));
+      const u = -0.5 * lmiAnalysis.rho * Bt_Winv_error;
       
       console.log('Control calculation details:', {
         state_vector: state,
@@ -1545,16 +1554,20 @@ function App() {
                   className="parameter-input"
                 />
               </div>
-              <button 
+              <button
                 onClick={() => {
                   analyzeEigenvalues();
                   analyzeLMI();
                 }}
                 className="analyze-button"
+                disabled={solverStatus !== null}
               >
-                Analyze
+                {solverStatus !== null ? 'Working…' : 'Analyze'}
               </button>
             </div>
+            {solverStatus && (
+              <div className="solver-status">{solverStatus}</div>
+            )}
           </div>
         </div>
 
