@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import { Switch } from '@headlessui/react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import * as localSolver from './solver/localSolver';
 import type { CCMResult } from './solver/sdpSolver';
 import type {
@@ -732,34 +732,10 @@ function App() {
                 )}
 
                 {/* States */}
-                <LineChart width={600} height={200} data={simulationData.points} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="t" ticks={xAxisTicks} tickCount={xAxisTicks.length} />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend
-                    layout="horizontal"
-                    align="right"
-                    verticalAlign="top"
-                    wrapperStyle={{ paddingLeft: '10px', paddingTop: '10px', backgroundColor: 'rgba(255, 255, 255, 0.8)', borderRadius: '4px' }}
-                  />
-                  {states.map((state, idx) => (
-                    <Line
-                      key={`state-${idx}`}
-                      type="monotone"
-                      dataKey={`states[${idx}]`}
-                      stroke={STATE_COLORS[idx]}
-                      name={state.name || `x${idx + 1}`}
-                      dot={false}
-                    />
-                  ))}
-                </LineChart>
-
-                {/* Control input */}
-                {simulationMode === 'closed-loop' && (
-                  <LineChart width={600} height={200} data={simulationData.points} margin={{ top: 5, right: 30, left: 20, bottom: 20 }}>
+                <ResponsiveContainer width="100%" height={200}>
+                  <LineChart data={simulationData.points} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="t" label={{ value: 'Time (s)', position: 'bottom' }} ticks={xAxisTicks} tickCount={xAxisTicks.length} />
+                    <XAxis dataKey="t" ticks={xAxisTicks} tickCount={xAxisTicks.length} />
                     <YAxis />
                     <Tooltip />
                     <Legend
@@ -768,8 +744,36 @@ function App() {
                       verticalAlign="top"
                       wrapperStyle={{ paddingLeft: '10px', paddingTop: '10px', backgroundColor: 'rgba(255, 255, 255, 0.8)', borderRadius: '4px' }}
                     />
-                    <Line type="monotone" dataKey="u" stroke="#ff7300" name="control input" dot={false} />
+                    {states.map((state, idx) => (
+                      <Line
+                        key={`state-${idx}`}
+                        type="monotone"
+                        dataKey={`states[${idx}]`}
+                        stroke={STATE_COLORS[idx]}
+                        name={state.name || `x${idx + 1}`}
+                        dot={false}
+                      />
+                    ))}
                   </LineChart>
+                </ResponsiveContainer>
+
+                {/* Control input */}
+                {simulationMode === 'closed-loop' && (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={simulationData.points} margin={{ top: 5, right: 30, left: 20, bottom: 20 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="t" label={{ value: 'Time (s)', position: 'bottom' }} ticks={xAxisTicks} tickCount={xAxisTicks.length} />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend
+                        layout="horizontal"
+                        align="right"
+                        verticalAlign="top"
+                        wrapperStyle={{ paddingLeft: '10px', paddingTop: '10px', backgroundColor: 'rgba(255, 255, 255, 0.8)', borderRadius: '4px' }}
+                      />
+                      <Line type="monotone" dataKey="u" stroke="#ff7300" name="control input" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 )}
               </div>
             )}
